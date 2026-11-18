@@ -53,6 +53,9 @@ type SchemaStore interface {
 	// info cache.
 	GetTableInfo(ctx context.Context, keyspaceMeta common.KeyspaceMeta, tableID int64, ts uint64) (*common.TableInfo, error)
 
+	// GetTableInfoAtTs also supports tables with no local dispatcher registration.
+	GetTableInfoAtTs(ctx context.Context, keyspaceMeta common.KeyspaceMeta, tableID int64, ts uint64) (*common.TableInfo, error)
+
 	// TODO: how to respect tableFilter
 	GetTableDDLEventState(keyspaceMeta common.KeyspaceMeta, tableID int64) (DDLEventState, error)
 
@@ -518,6 +521,19 @@ func (s *schemaStore) GetTableInfo(ctx context.Context, keyspaceMeta common.Keys
 		return nil, err
 	}
 	return store.dataStorage.getTableInfo(tableID, ts)
+}
+
+func (s *schemaStore) GetTableInfoAtTs(ctx context.Context, keyspaceMeta common.KeyspaceMeta, tableID int64, ts uint64) (*common.TableInfo, error) {
+	store, err := s.acquireKeyspaceSchemaStore(ctx, keyspaceMeta)
+	if err != nil {
+		return nil, err
+	}
+	defer store.release()
+
+	if err := store.waitResolvedTs(ctx, tableID, ts, 2*time.Second); err != nil {
+		return nil, err
+	}
+	return store.dataStorage.getTableInfoAtTs(tableID, ts)
 }
 
 func (s *schemaStore) GetTableDDLEventState(keyspaceMeta common.KeyspaceMeta, tableID int64) (DDLEventState, error) {
